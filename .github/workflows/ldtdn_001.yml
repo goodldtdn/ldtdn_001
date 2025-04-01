@@ -1,9 +1,11 @@
-name: Build and ldtdn001 Worker
+name: Build Obfuscate BPB Panel
 
 on:
   push:
     branches:
-      - dev
+      - main
+  schedule:
+    - cron: "0 1 * * *"
 
 permissions:
   contents: write
@@ -22,33 +24,30 @@ jobs:
           node-version: "latest"
 
       - name: Install dependencies
-        run: npm install
-
-      - name: Build project
-        run: npx wrangler deploy src/worker.js --name bpb-worker-panel --compatibility-flag [nodejs_compat] --compatibility-date 2025-01-18 --dry-run --minify --outdir=dist
-          
-      - name: Minify JS
-        run: npx terser dist/worker.js --output dist/_worker.js --comments false
-      
-      - name: Organize build files
         run: |
-          mkdir -p build
-          cp -f dist/_worker.js build/unobfuscated-worker.js
-          zip -j build/unobfuscated-worker.zip dist/_worker.js
+          npm install -g javascript-obfuscator
 
-      - name: Obfuscate JS
+      - name: Clone BPB workjs
         run: |
-          npx javascript-obfuscator --config ./obfs-config.json dist/_worker.js --output _worker.js
-          cp -f _worker.js build/worker.js
-          zip -j build/worker.zip _worker.js
+          wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/refs/heads/main/build/unobfuscated-worker.js
 
-      - name: Commit and push built worker
+      - name: Obfuscate BPB worker js
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add _worker.js
-          git add -f build/
-          git commit -m "Automated build: update _worker.js"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          javascript-obfuscator origin.js --output _worker.js \
+          --compact true \
+          --identifier-names-generator hexadecimal \
+          --rename-globals true \
+          --string-array true \
+          --string-array-encoding 'base64' \
+          --string-array-threshold 0.75 \
+          --transform-object-keys true \
+          --self-defending false \
+          --simplify true
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: main
+          commit_message: ':arrow_up: update latest bpb panel'
+          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
+          push_options: '--set-upstream'
